@@ -29,6 +29,9 @@ export default function AdminPage() {
   const [currentPass, setCurrentPass] = useState("");
   const [newPass, setNewPass] = useState("");
   const [passMessage, setPassMessage] = useState("");
+  const [maxCapacity, setMaxCapacity] = useState("0");
+  const [savingCapacity, setSavingCapacity] = useState(false);
+  const [capacityMessage, setCapacityMessage] = useState("");
 
   // every admin request carries the token
   const authFetch = (url: string, init: RequestInit = {}) => {
@@ -69,6 +72,7 @@ export default function AdminPage() {
 
       setList(regData.registrations || []);
       setRegistrationOpen(settingsData.registrationOpen !== false);
+      setMaxCapacity(String(settingsData.maxCapacity ?? 0));
     } catch (err: any) {
       setError(err.message || "بارگذاری لیست ناموفق بود.");
     } finally {
@@ -126,6 +130,54 @@ export default function AdminPage() {
       setError(err.message || "تغییر وضعیت ناموفق بود.");
     } finally {
       setToggling(false);
+    }
+  };
+
+  const saveCapacity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingCapacity(true);
+    setCapacityMessage("");
+    try {
+      const cap = parseInt(maxCapacity, 10);
+      if (isNaN(cap) || cap < 0)
+        throw new Error("لطفاً یک عدد معتبر وارد کنید");
+      const res = await authFetch("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ maxCapacity: cap }),
+      });
+      if (res.status === 401) {
+        logout();
+        return;
+      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "خطا");
+      setCapacityMessage(
+        cap === 0 ? "✅ بدون محدودیت" : `✅ ظرفیت روی ${cap} ثبت شد`
+      );
+    } catch (err: any) {
+      setCapacityMessage(err.message);
+    } finally {
+      setSavingCapacity(false);
+    }
+  };
+
+  const exportCsv = async () => {
+    try {
+      const res = await authFetch("/api/export");
+      if (res.status === 401) {
+        logout();
+        return;
+      }
+      if (!res.ok) throw new Error("خطا در دریافت فایل");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "registrations.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setError(err.message || "خطا در دانلود فایل");
     }
   };
 
@@ -222,9 +274,45 @@ export default function AdminPage() {
             >
               ریست دیتابیس
             </button>
+            <button
+              onClick={exportCsv}
+              className="px-4 py-2 rounded-lg bg-emerald-600/80 hover:bg-emerald-500 text-sm text-white"
+            >
+              دریافت CSV
+            </button>
           </div>
         </div>
 
+        {/* ظرفيت ثبت نام */}
+        <div className="mb-8 p-4 rounded-xl bg-slate-800/60 border border-slate-700">
+          <p className="text-white font-medium mb-1">ظرفیت ثبت‌نام</p>
+          <p className="text-sm text-slate-400 mb-3">
+            عدد ۰ یعنی بدون محدودیت. وقتی تعداد ثبت‌نام‌ها به این عدد برسد،
+            ثبت‌نام خودکار بسته می‌شود.
+          </p>
+          <form
+            onSubmit={saveCapacity}
+            className="flex flex-wrap items-center gap-3"
+          >
+            <input
+              type="number"
+              min={0}
+              value={maxCapacity}
+              onChange={(e) => setMaxCapacity(e.target.value)}
+              className="w-32 px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-600 text-white"
+            />
+            <button
+              type="submit"
+              disabled={savingCapacity}
+              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm"
+            >
+              {savingCapacity ? "..." : "ذخیره ظرفیت"}
+            </button>
+            {capacityMessage && (
+              <span className="text-sm text-slate-300">{capacityMessage}</span>
+            )}
+          </form>
+        </div>
         {/* وضعیت ثبت‌نام */}
         <div className="mb-8 p-4 rounded-xl bg-slate-800/60 border border-slate-700 flex items-center justify-between gap-4">
           <div>
@@ -334,7 +422,7 @@ export default function AdminPage() {
             </div>
           ))}
         </div>
-        
+
         <div className="mb-8 p-4 rounded-xl bg-slate-800/60 border border-slate-700">
           <p className="text-white font-medium mb-3">تغییر رمز عبور</p>
           <form onSubmit={changePassword} className="flex flex-wrap gap-3">

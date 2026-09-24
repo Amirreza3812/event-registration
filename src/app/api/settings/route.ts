@@ -4,17 +4,34 @@ import type { RowDataPacket } from "mysql2/promise";
 import db from "@/lib/db";
 import { getAdminFromRequest } from "@/lib/auth";
 
-// public: only the open/closed status
+// public: status + capacity info (no secrets)
 export async function GET() {
   try {
     const [rows] = await db.execute<RowDataPacket[]>(
-      "SELECT registrationOpen FROM settings LIMIT 1"
+      "SELECT registrationOpen, maxCapacity FROM settings LIMIT 1"
     );
+
     const open = rows.length === 0 ? true : Boolean(rows[0].registrationOpen);
-    return NextResponse.json({ registrationOpen: open });
+    const maxCapacity =
+      rows.length === 0 ? 0 : Number(rows[0].maxCapacity) || 0;
+
+    const [countRows] = await db.execute<RowDataPacket[]>(
+      "SELECT COUNT(*) AS total FROM registrations"
+    );
+    const registeredCount = Number(countRows[0]?.total ?? 0);
+
+    return NextResponse.json({
+      registrationOpen: open,
+      maxCapacity,
+      registeredCount,
+    });
   } catch (err) {
     console.error("Get settings error:", err);
-    return NextResponse.json({ registrationOpen: true });
+    return NextResponse.json({
+      registrationOpen: true,
+      maxCapacity: 0,
+      registeredCount: 0,
+    });
   }
 }
 
@@ -39,7 +56,20 @@ export async function PATCH(req: NextRequest) {
       });
     }
 
-    // change password (needs current password)
+    // set capacity (0 = unlimited)
+    if (body.maxCapacity !== undefined) {
+      const cap = Number(body.maxCapacity);
+      if (!Number.isInteger(cap) || cap < 0) {
+        return NextResponse.json(
+          { error: "ظرفیت باید یک عدد صحیح و مثبت باشد" },
+          { status: 400 }
+        );
+      }
+      await db.execute("UPDATE settings SET maxCapacity = ?", [cap]);
+      return NextResponse.json({ success: true, maxCapacity: cap });
+    }
+
+    // change password
     if (
       typeof body.currentPassword === "string" &&
       typeof body.newPassword === "string"

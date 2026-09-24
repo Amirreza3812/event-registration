@@ -52,13 +52,32 @@ export default function Home() {
   const [registrationOpen, setRegistrationOpen] = useState<boolean | null>(
     null
   );
+  const [capacity, setCapacity] = useState<{
+    max: number;
+    count: number;
+  } | null>(null);
 
-  useEffect(() => {
+  const loadSettings = () => {
     fetch("/api/settings")
       .then((r) => r.json())
-      .then((data) => setRegistrationOpen(data.registrationOpen !== false))
+      .then((data) => {
+        setRegistrationOpen(data.registrationOpen !== false);
+        setCapacity({
+          max: data.maxCapacity ?? 0,
+          count: data.registeredCount ?? 0,
+        });
+      })
       .catch(() => setRegistrationOpen(true));
+  };
+
+  useEffect(() => {
+    loadSettings();
   }, []);
+
+  const remaining =
+    capacity && capacity.max > 0
+      ? Math.max(0, capacity.max - capacity.count)
+      : null;
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -84,6 +103,7 @@ export default function Home() {
     ) {
       setStatus("error");
       setMessage("لطفاً تمام فیلدها را پر کنید.");
+      loadSettings();
       return;
     }
 
@@ -169,7 +189,7 @@ export default function Home() {
   }
 
   // Registration closed
-  if (!registrationOpen) {
+  if (registrationOpen === false || remaining === 0) {
     return (
       <main className="min-h-screen flex flex-col items-center justify-center px-4 py-12">
         <div className="w-full max-w-lg text-center">
@@ -190,7 +210,9 @@ export default function Home() {
             </svg>
           </div>
           <h1 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-            ثبت‌نام بسته است
+            {registrationOpen === false
+              ? "ثبت‌نام بسته است"
+              : "ظرفیت تکمیل شده"}
           </h1>
           <p className="text-slate-300 text-base leading-relaxed mb-6">
             تا رویداد بعدی می‌توانید ارتباطتان را با کامیونیتی ما از طریق کانال
@@ -248,6 +270,13 @@ export default function Home() {
             Grow
           </span>
         </div>
+        {remaining !== null && remaining > 0 && (
+          <div className="mt-5">
+            <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-sm font-medium">
+              ✅ {remaining.toLocaleString("fa-IR")} جای باقی‌مانده
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Form Card */}

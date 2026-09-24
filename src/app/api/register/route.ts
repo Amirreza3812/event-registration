@@ -58,6 +58,24 @@ export async function POST(req: NextRequest) {
         { error: "جنسیت را انتخاب کنید" },
         { status: 400 }
       );
+      // capacity check
+      const [settingsRows] = await db.execute<RowDataPacket[]>(
+        "SELECT maxCapacity FROM settings LIMIT 1"
+      );
+      const maxCapacity =
+        settingsRows.length > 0 ? Number(settingsRows[0].maxCapacity) || 0 : 0;
+
+      if (maxCapacity > 0) {
+        const [countRows] = await db.execute<RowDataPacket[]>(
+          "SELECT COUNT(*) AS total FROM registrations"
+        );
+        if (Number(countRows[0].total) >= maxCapacity) {
+          return NextResponse.json(
+            { error: "ظرفیت رویداد تکمیل شده است" },
+            { status: 409 }
+          );
+        }
+      }
     }
 
     await db.execute<ResultSetHeader>(
